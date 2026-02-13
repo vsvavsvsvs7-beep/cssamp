@@ -126,19 +126,43 @@ async def menu(ctx):
         description="Gunakan command `!cs` untuk membuat Character Story epik. Pilih Goodside 😇 atau Badside 😈 lewat tombol setelah menjalankan `!cs`.",
         color=0x5865f2
     )
-    embed.add_field(name="✨ !help", value="Tampilkan bantuan & panduan command.", inline=False)
+    embed.add_field(name="✨ !help", value="Tampilkan panduan cara membuat CS.", inline=False)
     embed.add_field(name="📖 !cs", value="Mulai membuat Character Story interaktif.", inline=False)
     embed.add_field(name="⏳ !checkcooldown", value="Cek cooldownmu saat ini.", inline=False)
     embed.add_field(name="♻️ !reset @player", value="Reset cooldown player (Owner / Management).", inline=False)
     embed.add_field(name="⏱️ !cekcdall", value="Cek cooldown semua player (Owner / Management).", inline=False)
     embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
-    embed.set_footer(text=f"Butuh bantuan hubungi <@{OWNER_ID}> atau <@&{MANAGEMENT_ROLE_ID}>")
 
-    await ctx.send(embed=embed)
+    await ctx.send(content=f"Butuh bantuan hubungi <@{OWNER_ID}> atau <@&{MANAGEMENT_ROLE_ID}>", embed=embed)
 
 @bot.command()
 async def help(ctx):
-    await menu(ctx)
+    if ctx.channel.id != ALLOWED_CHANNEL_ID:
+        return
+
+    embed = discord.Embed(
+        title="📜 Story Crafter - Panduan Membuat CS",
+        description="Berikut panduan membuat Character Story:",
+        color=0x5865f2
+    )
+    embed.add_field(
+        name="1️⃣ Mulai CS",
+        value="Ketik `!cs` untuk memulai membuat Character Story. Pilih Goodside 😇 atau Badside 😈 lewat tombol.",
+        inline=False
+    )
+    embed.add_field(
+        name="2️⃣ Isi Form",
+        value="- Nama Lengkap Karakter (IC)\n- Level Karakter\n- Jenis Kelamin\n- Tanggal Lahir\n- Kota Asal (Los Santos, San Fierro, Las Venturas)\n\nPastikan semua data terisi.",
+        inline=False
+    )
+    embed.add_field(
+        name="3️⃣ Submit & Lihat Hasil",
+        value="Setelah submit, bot akan menampilkan CS panjang otomatis di channel.\n⚠️ Cooldown: 24 jam per user. Reset bisa minta ke Owner / Management.",
+        inline=False
+    )
+    embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
+
+    await ctx.send(content=f"Butuh bantuan hubungi <@{OWNER_ID}> atau <@&{MANAGEMENT_ROLE_ID}>", embed=embed)
 
 @bot.command()
 async def cs(ctx):
