@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 
-TOKEN = "ISI_TOKEN_KAMU"
+TOKEN = os.getenv("TOKEN")
 ALLOWED_CHANNEL_ID = 1471935338065694875
 
 intents = discord.Intents.default()
