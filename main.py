@@ -21,7 +21,7 @@ class CSBot(commands.Bot):
 
 bot = CSBot()
 
-# ================= MODAL 2/2 =================
+# ================= MODAL 2 =================
 
 class CSModalPart2(discord.ui.Modal):
 
@@ -30,22 +30,22 @@ class CSModalPart2(discord.ui.Modal):
         self.data = data
 
         self.skill = discord.ui.TextInput(
-            label="Bakat/Keahlian Dominan Karakter",
-            placeholder="Contoh: Penembak jitu, mekanik, negosiator, hacker",
+            label="Bakat/Keahlian Dominan",
+            placeholder="Contoh: Penembak jitu, mekanik, hacker",
             required=True,
             max_length=200
         )
 
         self.etnis = discord.ui.TextInput(
             label="Kultur/Etnis (Opsional)",
-            placeholder="Contoh: American, Japanese, Hispanic",
+            placeholder="Contoh: American, Japanese",
             required=False,
             max_length=200
         )
 
         self.detail = discord.ui.TextInput(
-            label="Detail Cerita Karakter",
-            placeholder="Ceritakan latar belakang karakter secara lengkap, masa kecil, konflik, tujuan hidup, dll",
+            label="Cerita Lengkap Karakter",
+            placeholder="Ceritakan masa kecil, konflik, tujuan hidup, dll",
             style=discord.TextStyle.paragraph,
             required=True,
             min_length=200,
@@ -59,18 +59,14 @@ class CSModalPart2(discord.ui.Modal):
     async def on_submit(self, interaction: discord.Interaction):
 
         embed = discord.Embed(
-            title="Character Story berhasil dibuat",
+            title="Character Story Berhasil Dibuat",
             color=0x2ecc71
         )
 
         embed.add_field(name="Server", value=self.data["server"], inline=True)
         embed.add_field(name="Alur", value=self.data["side"], inline=True)
 
-        embed.add_field(
-            name="Nama IC",
-            value=self.data["nama"],
-            inline=False
-        )
+        embed.add_field(name="Nama IC", value=self.data["nama"], inline=False)
 
         embed.add_field(
             name="Info Karakter",
@@ -83,73 +79,63 @@ class CSModalPart2(discord.ui.Modal):
             inline=False
         )
 
-        embed.add_field(
-            name="Keahlian",
-            value=self.skill.value,
-            inline=False
-        )
+        embed.add_field(name="Keahlian", value=self.skill.value, inline=False)
 
         if self.etnis.value:
-            embed.add_field(
-                name="Etnis",
-                value=self.etnis.value,
-                inline=False
-            )
+            embed.add_field(name="Etnis", value=self.etnis.value, inline=False)
 
-        embed.add_field(
-            name="Cerita Lengkap",
-            value=self.detail.value,
-            inline=False
-        )
+        embed.add_field(name="Cerita", value=self.detail.value, inline=False)
 
-        await interaction.response.send_message(
-            embed=embed,
-            ephemeral=True
-        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
-# ================= MODAL 1/2 =================
+# ================= VIEW LANJUT =================
+
+class ContinueView(discord.ui.View):
+    def __init__(self, data):
+        super().__init__(timeout=300)
+        self.data = data
+
+    @discord.ui.button(label="Lanjut ke Tahap 2", style=discord.ButtonStyle.primary)
+    async def lanjut(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(CSModalPart2(self.data))
+
+# ================= MODAL 1 =================
 
 class CSModalPart1(discord.ui.Modal):
 
     def __init__(self, server, side):
         super().__init__(title="Form Character Story (1/2)")
-
         self.server = server
         self.side = side
 
         self.nama = discord.ui.TextInput(
             label="Nama Lengkap Karakter (IC)",
-            placeholder="Contoh: John Washington, Kenji Tanaka",
-            required=True,
-            max_length=100
+            placeholder="Contoh: John Washington",
+            required=True
         )
 
         self.level = discord.ui.TextInput(
             label="Level Karakter",
             placeholder="Contoh: 1",
-            required=True,
-            max_length=10
+            required=True
         )
 
         self.gender = discord.ui.TextInput(
             label="Jenis Kelamin",
             placeholder="Contoh: Laki-laki / Perempuan",
-            required=True,
-            max_length=50
+            required=True
         )
 
         self.ttl = discord.ui.TextInput(
             label="Tanggal Lahir",
             placeholder="Contoh: 17 Agustus 1995",
-            required=True,
-            max_length=50
+            required=True
         )
 
         self.kota = discord.ui.TextInput(
             label="Kota Asal",
-            placeholder="Contoh: Chicago, Illinois",
-            required=True,
-            max_length=100
+            placeholder="Contoh: Chicago",
+            required=True
         )
 
         self.add_item(self.nama)
@@ -170,85 +156,44 @@ class CSModalPart1(discord.ui.Modal):
             "kota": self.kota.value
         }
 
-        await interaction.response.send_modal(
-            CSModalPart2(data)
+        view = ContinueView(data)
+
+        await interaction.response.send_message(
+            "Data tahap 1 berhasil disimpan.\nKlik tombol di bawah untuk lanjut.",
+            view=view,
+            ephemeral=True
         )
 
-# ================= VIEW ALUR =================
+# ================= VIEW PILIH ALUR =================
 
 class SideView(discord.ui.View):
-
     def __init__(self, server):
         super().__init__(timeout=None)
         self.server = server
 
     @discord.ui.button(label="Sisi Baik (Goodside)", style=discord.ButtonStyle.success)
     async def good(self, interaction: discord.Interaction, button: discord.ui.Button):
-
-        await interaction.response.send_modal(
-            CSModalPart1(self.server, "Goodside")
-        )
+        await interaction.response.send_modal(CSModalPart1(self.server, "Goodside"))
 
     @discord.ui.button(label="Sisi Jahat (Badside)", style=discord.ButtonStyle.danger)
     async def bad(self, interaction: discord.Interaction, button: discord.ui.Button):
-
-        await interaction.response.send_modal(
-            CSModalPart1(self.server, "Badside")
-        )
+        await interaction.response.send_modal(CSModalPart1(self.server, "Badside"))
 
 # ================= SELECT SERVER =================
 
 class ServerSelect(discord.ui.Select):
-
     def __init__(self):
 
         options = [
-
-            discord.SelectOption(
-                label="SSRP",
-                description="Buat CS untuk server State Side RP"
-            ),
-
-            discord.SelectOption(
-                label="Virtual RP",
-                description="Buat CS untuk server Virtual RP"
-            ),
-
-            discord.SelectOption(
-                label="AARP",
-                description="Buat CS untuk server Air Asia RP"
-            ),
-
-            discord.SelectOption(
-                label="GCRP",
-                description="Buat CS untuk server Grand Country RP"
-            ),
-
-            discord.SelectOption(
-                label="TEN ROLEPLAY",
-                description="Buat CS untuk server 10RP"
-            ),
-
-            discord.SelectOption(
-                label="CPRP",
-                description="Buat CS untuk server Crystal Pride RP"
-            ),
-
-            discord.SelectOption(
-                label="Relative RP",
-                description="Buat CS untuk server Relative RP"
-            ),
-
-            discord.SelectOption(
-                label="JGRP",
-                description="Buat CS untuk server JGRP"
-            ),
-
-            discord.SelectOption(
-                label="FMRP",
-                description="Buat CS untuk server Famerlone RP"
-            )
-
+            discord.SelectOption(label="SSRP", description="State Side RP"),
+            discord.SelectOption(label="Virtual RP", description="Virtual RP"),
+            discord.SelectOption(label="AARP", description="Air Asia RP"),
+            discord.SelectOption(label="GCRP", description="Grand Country RP"),
+            discord.SelectOption(label="TEN ROLEPLAY", description="10RP"),
+            discord.SelectOption(label="CPRP", description="Crystal Pride RP"),
+            discord.SelectOption(label="Relative RP", description="Relative RP"),
+            discord.SelectOption(label="JGRP", description="JGRP"),
+            discord.SelectOption(label="FMRP", description="Famerlone RP"),
         ]
 
         super().__init__(
@@ -257,14 +202,13 @@ class ServerSelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
-
         await interaction.response.send_message(
             "Pilih alur karakter:",
             view=SideView(self.values[0]),
             ephemeral=True
         )
 
-# ================= COMMAND PANEL =================
+# ================= COMMAND =================
 
 @bot.command()
 async def panelcs(ctx):
