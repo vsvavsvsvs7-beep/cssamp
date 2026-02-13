@@ -2,9 +2,10 @@ import discord
 from discord.ext import commands
 import random
 import datetime
+import os
 
 # ================== Config ==================
-TOKEN = "YOUR_BOT_TOKEN"  # Ganti dengan token bot-mu
+TOKEN = os.getenv("TOKEN")  # Railway environment variable
 ALLOWED_CHANNEL_ID = 1471935338065694875  # Channel khusus CS
 
 # ================== Bot Setup ==================
@@ -13,7 +14,7 @@ class TatangCS(commands.Bot):
         intents = discord.Intents.default()
         intents.message_content = True
         super().__init__(command_prefix="!", intents=intents, help_command=None)
-        self.cooldowns = {}   # {user_id: datetime}
+        self.cooldowns = {}  # {user_id: datetime}
 
     async def on_ready(self):
         print(f"✅ Bot siap! Login sebagai {self.user}")
@@ -55,15 +56,14 @@ class CSModal(discord.ui.Modal, title="Form Character Story"):
     async def on_submit(self, interaction: discord.Interaction):
         now = datetime.datetime.now()
 
-        # Per user cooldown 24 jam
+        # Cooldown 24 jam
         cd = bot.cooldowns.get(self.user_id)
         if cd and (cd - now).total_seconds() > 0:
             remaining = int((cd - now).total_seconds())
             minutes = remaining // 60
             seconds = remaining % 60
             await interaction.response.send_message(
-                f"⏳ Maaf {interaction.user.mention}, kamu masih cooldown.\n"
-                f"Sisa waktu: `{minutes}m {seconds}s`", ephemeral=True
+                f"⏳ Maaf {interaction.user.mention}, kamu masih cooldown.\nSisa waktu: `{minutes}m {seconds}s`", ephemeral=True
             )
             return
 
@@ -136,7 +136,7 @@ async def checkcooldown(ctx):
     else:
         await ctx.send(f"✅ {ctx.author.mention}, kamu bisa membuat CS sekarang!")
 
-# ================== Reset / Cek All (Owner = Pemilik Server) ==================
+# ================== Reset / Cek All (Pemilik Server) ==================
 @bot.command()
 async def reset(ctx, member: discord.Member):
     if ctx.author != ctx.guild.owner:
@@ -203,4 +203,4 @@ async def ping(ctx):
 if TOKEN:
     bot.run(TOKEN)
 else:
-    print("❌ TOKEN tidak ditemukan.")
+    print("❌ TOKEN tidak ditemukan di environment variable.")
