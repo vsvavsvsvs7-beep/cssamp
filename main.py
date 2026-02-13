@@ -1,18 +1,17 @@
 import discord
 from discord.ext import commands
 from openai import OpenAI
-os
+import os
 import io
 import datetime
 import re
 
 # ================= KONFIGURASI =================
 TOKEN = os.getenv('TOKEN')
-# Gunakan API Key ChatGPT kamu di sini
+# API Key ChatGPT yang kamu berikan
 OPENAI_API_KEY = "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"
 ALLOWED_CHANNEL_ID = 1471935338065694875 
 
-# Inisialisasi Client OpenAI
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 class TatangBot(commands.Bot):
@@ -22,19 +21,19 @@ class TatangBot(commands.Bot):
         super().__init__(command_prefix='!', intents=intents, help_command=None)
 
     async def on_ready(self):
-        await self.change_presence(activity=discord.Game(name="!menu | ChatGPT Powered"))
-        print(f"✅ Bot Online (ChatGPT Mode): {self.user}")
+        await self.change_presence(activity=discord.Game(name="!menu | ChatGPT CS"))
+        print(f"✅ Bot Berhasil Online!")
 
 bot = TatangBot()
 
-# ================= MODAL FORM =================
+# ================= MODAL FORM (CHATGPT) =================
 class CSModal(discord.ui.Modal, title="Form Character Story (ChatGPT)"):
-    identitas = discord.ui.TextInput(label="Nama IC & Level", placeholder="Contoh: John_Doe | Level 5", required=True)
+    identitas = discord.ui.TextInput(label="Nama IC & Level", placeholder="Contoh: Dika_Ganteng | Level 5", required=True)
     biodata = discord.ui.TextInput(label="Gender & Kota Asal", placeholder="Contoh: Laki-laki | Chicago", required=True)
     detail = discord.ui.TextInput(
         label="Bakat & Masa Lalu", 
         style=discord.TextStyle.paragraph, 
-        placeholder="Ceritakan keahlian dan latar belakang karaktermu...",
+        placeholder="Tuliskan masa lalu dan tujuan hidup karaktermu secara mendetail...",
         max_length=2000,
         required=True
     )
@@ -44,6 +43,7 @@ class CSModal(discord.ui.Modal, title="Form Character Story (ChatGPT)"):
         self.server, self.side = server, side
 
     async def on_submit(self, interaction: discord.Interaction):
+        # Gunakan defer untuk menghindari 'Something went wrong'
         await interaction.response.defer(ephemeral=True)
         
         prompt = (
@@ -52,30 +52,39 @@ class CSModal(discord.ui.Modal, title="Form Character Story (ChatGPT)"):
             f"Identitas: {self.identitas.value}\n"
             f"Biodata: {self.biodata.value}\n"
             f"Latar Belakang: {self.detail.value}\n\n"
-            "WAJIB: Minimal 500 kata, BBCode forum lengkap ([center], [justify], [b])."
+            "WAJIB: Minimal 500 kata, BBCode forum lengkap ([center], [justify], [b]). "
+            "Gunakan bahasa Indonesia yang emosional dan mendalam."
         )
         
         try:
-            # Pemanggilan API ChatGPT (GPT-3.5-Turbo atau GPT-4)
-            response = client.chat.completions.create(
+            # Memanggil ChatGPT
+            completion = client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
-                    {"role": "system", "content": "Kamu adalah penulis Character Story GTA SAMP profesional."},
+                    {"role": "system", "content": "Kamu adalah penulis CS GTA SAMP profesional. Selalu sertakan instruksi copy-paste di akhir."},
                     {"role": "user", "content": prompt}
                 ]
             )
             
-            hasil_cerita = response.choices[0].message.content
+            hasil_cerita = completion.choices[0].message.content
             
-            # Tambahkan instruksi di file .txt
-            isi_file = f"--- INSTRUKSI COPY-PASTE ---\nServer: {self.server}\nSisi: {self.side}\n---------------------------\n\n{hasil_cerita}"
-            file_data = io.BytesIO(isi_file.encode('utf-8'))
+            # Buat isi file dengan instruksi
+            isi_teks = (
+                f"--- INSTRUKSI COPY-PASTE CS ---\n"
+                f"Server: {self.server}\n"
+                f"Karakter: {self.identitas.value}\n"
+                f"--------------------------------\n\n"
+                f"{hasil_cerita}"
+            )
+            
+            file_data = io.BytesIO(isi_teks.encode('utf-8'))
             clean_name = re.sub(r'[^\w\s-]', '', self.identitas.value).strip().replace(' ', '_')
             
             embed = discord.Embed(
                 title="✅ CS ChatGPT Selesai!",
-                description=f"Karakter: **{self.identitas.value}**\nFile .txt siap diunduh.",
-                color=0x10a37f # Warna hijau khas ChatGPT
+                description=f"Berhasil membuat cerita untuk **{self.identitas.value}**.\nDownload file di bawah.",
+                color=0x10a37f,
+                timestamp=datetime.datetime.utcnow()
             )
             
             await interaction.followup.send(
@@ -85,40 +94,53 @@ class CSModal(discord.ui.Modal, title="Form Character Story (ChatGPT)"):
             )
             
         except Exception as e:
-            await interaction.followup.send(f"❌ Kesalahan ChatGPT: {str(e)}", ephemeral=True)
+            await interaction.followup.send(f"❌ Error ChatGPT: {str(e)}", ephemeral=True)
 
-# ================= UI SELECTION =================
+# ================= UI & COMMANDS =================
 class CSAlurView(discord.ui.View):
     def __init__(self, server):
         super().__init__(timeout=None)
         self.server = server
 
-    @discord.ui.button(label="Sisi Baik", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="Sisi Baik (Goodside)", style=discord.ButtonStyle.success, emoji="😇")
     async def good(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(CSModal(self.server, "Goodside"))
 
-    @discord.ui.button(label="Sisi Jahat", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label="Sisi Jahat (Badside)", style=discord.ButtonStyle.danger, emoji="😈")
     async def bad(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(CSModal(self.server, "Badside"))
 
 class ServerSelect(discord.ui.Select):
     def __init__(self):
-        options = [discord.SelectOption(label=s) for s in ["JGRP", "SSRP", "Virtual RP", "AARP", "GCRP", "TEN RP", "CPRP", "Relative RP", "FMRP"]]
+        options = [
+            discord.SelectOption(label="JGRP", emoji="🎮"),
+            discord.SelectOption(label="SSRP", emoji="🇺🇸"),
+            discord.SelectOption(label="Virtual RP", emoji="💻"),
+            discord.SelectOption(label="AARP", emoji="✈️"),
+            discord.SelectOption(label="GCRP", emoji="🌳"),
+            discord.SelectOption(label="TEN ROLEPLAY", emoji="🔟"),
+            discord.SelectOption(label="CPRP", emoji="💎"),
+            discord.SelectOption(label="Relative RP", emoji="👪"),
+            discord.SelectOption(label="FMRP", emoji="🛡️"),
+        ]
         super().__init__(placeholder="Pilih Server...", options=options)
 
     async def callback(self, interaction: discord.Interaction):
-        await interaction.response.send_message(f"📍 Server: **{self.values[0]}**", view=CSAlurView(self.values[0]), ephemeral=True)
+        await interaction.response.send_message(
+            f"📍 Server: **{self.values[0]}**. Pilih alur:", 
+            view=CSAlurView(self.values[0]), 
+            ephemeral=True
+        )
 
-# ================= COMMANDS =================
 @bot.command()
 async def panelcs(ctx):
     if ctx.channel.id != ALLOWED_CHANNEL_ID: return
     view = discord.ui.View(); view.add_item(ServerSelect())
-    await ctx.send("🚀 **Panel CS ChatGPT**", view=view)
+    await ctx.send("🚀 **Character Story Generator (ChatGPT)**", view=view)
 
 @bot.command()
 async def menu(ctx):
-    await ctx.send("🌟 Ketik `!panelcs` untuk membuat CS via ChatGPT.")
+    await ctx.send("🌟 Gunakan `!panelcs` untuk membuat cerita otomatis.")
 
 if TOKEN:
     bot.run(TOKEN)
