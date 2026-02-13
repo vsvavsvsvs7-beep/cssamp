@@ -10,8 +10,10 @@ TOKEN = os.getenv('TOKEN')
 GEMINI_API_KEY = "AIzaSyCl1ScXm0tpiGISw-Cx21LYkJU8P4F6icE"
 ALLOWED_CHANNEL_ID = 1471935338065694875 
 
+# Perbaikan Inisialisasi AI
 genai.configure(api_key=GEMINI_API_KEY)
-ai_model = genai.GenerativeModel('gemini-1.5-flash')
+# Menggunakan penamaan model yang lebih universal
+ai_model = genai.GenerativeModel('models/gemini-1.5-flash')
 
 class TatangBot(commands.Bot):
     def __init__(self):
@@ -20,20 +22,28 @@ class TatangBot(commands.Bot):
         super().__init__(command_prefix='!', intents=intents, help_command=None)
 
     async def on_ready(self):
-        await self.change_presence(activity=discord.Game(name="!menu | Premium CS AI"))
-        print(f"✅ {self.user} Online!")
+        await self.change_presence(activity=discord.Game(name="!menu | CS AI Premium"))
+        print(f"✅ Bot Berhasil Online: {self.user}")
 
 bot = TatangBot()
 
-# ================= MODAL SINGLE PAGE (ANTI-CRASH) =================
-class CSModal(discord.ui.Modal, title="Form Pembuatan Character Story"):
-    nama = discord.ui.TextInput(label="Nama IC & Level", placeholder="Contoh: John_Washington | Level 5", required=True)
-    biodata = discord.ui.TextInput(label="Gender, Tgl Lahir, Kota Asal", placeholder="Contoh: Laki-laki, 17-08-1995, Chicago", required=True)
-    bakat = discord.ui.TextInput(label="Bakat & Kultur", placeholder="Contoh: Supir ahli, Etnis Hispanic", required=True)
-    cerita = discord.ui.TextInput(
-        label="Detail Tambahan Cerita", 
+# ================= MODAL FORM (ANTI-ERROR) =================
+class CSModal(discord.ui.Modal, title="Form Character Story"):
+    # Saya ringkas labelnya agar tidak kena 'Invalid Form Body'
+    identitas = discord.ui.TextInput(
+        label="Nama IC & Level", 
+        placeholder="Contoh: John_Doe | Level 5", 
+        required=True
+    )
+    biodata = discord.ui.TextInput(
+        label="Gender & Kota Asal", 
+        placeholder="Contoh: Laki-laki | Chicago", 
+        required=True
+    )
+    detail = discord.ui.TextInput(
+        label="Bakat & Masa Lalu", 
         style=discord.TextStyle.paragraph, 
-        placeholder="Masukkan masa lalu, tujuan hidup, atau kejadian penting karaktermu...",
+        placeholder="Tuliskan keahlian dan ringkasan cerita karaktermu...",
         max_length=2000,
         required=True
     )
@@ -44,42 +54,41 @@ class CSModal(discord.ui.Modal, title="Form Pembuatan Character Story"):
         self.side = side
 
     async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.send_message("⌛ **AI sedang memproses cerita dan file .txt...**", ephemeral=True)
+        # Langsung respon agar tidak timeout
+        await interaction.response.send_message("⌛ **AI sedang memproses cerita kamu...**", ephemeral=True)
         
-        prompt = f"""
-        Buatkan Character Story GTA SAMP untuk server {self.server}.
-        Alur: {self.side}
-        Identitas: {self.nama.value}
-        Biodata Lengkap: {self.biodata.value}
-        Keahlian: {self.bakat.value}
-        Latar Belakang: {self.cerita.value}
-        
-        KETENTUAN:
-        1. Minimal 500 kata, bahasa Indonesia formal.
-        2. Gunakan format BBCode forum ([justify], [center], [b]).
-        3. Cerita harus mendalam dan emosional sesuai sisi {self.side}.
-        """
+        prompt = (
+            f"Buatkan Character Story GTA SAMP untuk server {self.server}.\n"
+            f"Alur: {self.side}\n"
+            f"Identitas: {self.identitas.value}\n"
+            f"Biodata: {self.biodata.value}\n"
+            f"Latar Belakang: {self.detail.value}\n\n"
+            "SYARAT: Minimal 500 kata, BBCode forum lengkap, bahasa Indonesia yang mendalam."
+        )
         
         try:
             response = ai_model.generate_content(prompt)
-            cerita = response.text
+            hasil_cerita = response.text
             
-            # Generate File .txt
-            file_data = io.BytesIO(cerita.encode('utf-8'))
-            discord_file = discord.File(file_data, filename=f"CS_{self.nama.value.split('|')[0].strip()}.txt")
+            # Buat file .txt otomatis
+            file_data = io.BytesIO(hasil_cerita.encode('utf-8'))
+            file_name = f"CS_{self.identitas.value.split('|')[0].strip()}.txt"
+            discord_file = discord.File(file_data, filename=file_name)
             
             embed = discord.Embed(
-                title="✅ Character Story Berhasil Dibuat!",
-                description=f"Server: **{self.server}** | Sisi: **{self.side}**\n\n*Cerita lengkap terlampir di bawah dalam format teks dan file.*",
-                color=0x2ecc71
+                title="✅ Character Story Berhasil!",
+                description=f"Server: **{self.server}** | Sisi: **{self.side}**\n\n*File .txt telah dilampirkan di bawah.*",
+                color=0x2ecc71,
+                timestamp=datetime.datetime.utcnow()
             )
             
             await interaction.followup.send(embed=embed)
-            await interaction.followup.send(content=f"```bbcode\n{cerita}\n```", file=discord_file)
+            await interaction.followup.send(content=f"```bbcode\n{hasil_cerita[:1800]}...\n(Lihat file .txt untuk teks lengkap)```", file=discord_file)
+            
         except Exception as e:
-            await interaction.followup.send(f"❌ Terjadi kesalahan pada AI: {e}")
+            await interaction.followup.send(f"❌ Kesalahan Sistem: {str(e)}")
 
-# ================= VIEW & SELECTION =================
+# ================= SELECTION LOGIC =================
 class CSAlurView(discord.ui.View):
     def __init__(self, server):
         super().__init__(timeout=None)
@@ -96,6 +105,7 @@ class CSAlurView(discord.ui.View):
 class ServerSelect(discord.ui.Select):
     def __init__(self):
         options = [
+            discord.SelectOption(label="JGRP", emoji="🎮"),
             discord.SelectOption(label="SSRP", emoji="🇺🇸"),
             discord.SelectOption(label="Virtual RP", emoji="💻"),
             discord.SelectOption(label="AARP", emoji="✈️"),
@@ -103,10 +113,9 @@ class ServerSelect(discord.ui.Select):
             discord.SelectOption(label="TEN ROLEPLAY", emoji="🔟"),
             discord.SelectOption(label="CPRP", emoji="💎"),
             discord.SelectOption(label="Relative RP", emoji="👪"),
-            discord.SelectOption(label="JGRP", emoji="🎮"),
             discord.SelectOption(label="FMRP", emoji="🛡️"),
         ]
-        super().__init__(placeholder="Pilih server tujuan...", options=options)
+        super().__init__(placeholder="Pilih Server Tujuan...", options=options)
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.send_message(
@@ -123,14 +132,16 @@ class ServerSelectView(discord.ui.View):
 # ================= COMMANDS =================
 @bot.command()
 async def menu(ctx):
-    embed = discord.Embed(title="🌟 TATANG AI PREMIUM", description="Ketik `!panelcs` untuk mulai.", color=0x5865f2)
+    embed = discord.Embed(title="🌟 TATANG AI PREMIUM", color=0x5865f2)
+    embed.add_field(name="Gunakan:", value="`!panelcs` di channel khusus.")
     await ctx.send(embed=embed)
 
 @bot.command()
 async def panelcs(ctx):
     if ctx.channel.id != ALLOWED_CHANNEL_ID:
         return await ctx.send(f"❌ Gunakan di <#{ALLOWED_CHANNEL_ID}>", delete_after=5)
-    await ctx.send("🚀 **Pilih Server Tujuan Kamu:**", view=ServerSelectView())
+    
+    await ctx.send("🚀 **Silakan pilih server untuk membuat CS:**", view=ServerSelectView())
 
 if TOKEN:
     bot.run(TOKEN)
