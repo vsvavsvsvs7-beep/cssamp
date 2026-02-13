@@ -30,9 +30,10 @@ def cooldown_active(user_id):
     cd = bot.cooldowns.get(user_id)
     if cd and (cd - now).total_seconds() > 0:
         remaining = int((cd - now).total_seconds())
-        minutes = remaining // 60
+        hours = remaining // 3600
+        minutes = (remaining % 3600) // 60
         seconds = remaining % 60
-        return f"{minutes}m {seconds}s"
+        return f"{hours}h {minutes}m {seconds}s"
     return None
 
 # ================= TASK LOOP =================
@@ -42,7 +43,6 @@ async def notify_cooldown():
     to_remove = []
     for user_id, cd in bot.cooldowns.items():
         if (cd - now).total_seconds() <= 0:
-            # Kirim notif di channel khusus
             channel = bot.get_channel(ALLOWED_CHANNEL_ID)
             if channel:
                 await channel.send(f"✅ <@{user_id}>, cooldown-mu sudah selesai! Sekarang kamu bisa membuat Character Story lagi!")
@@ -69,7 +69,6 @@ class CSModal(discord.ui.Modal, title="Form Character Story"):
         self.side = side
 
     def generate_story(self, nama, gender, kota, level):
-        # Story panjang Goodside / Badside berbeda
         intro = f"{nama} lahir dan dibesarkan di kota {kota}. Sejak kecil ia menghadapi berbagai dinamika kehidupan.\n"
         masa_kecil = f"Masa kecilnya membentuk karakter dan mentalnya. Lingkungan mengajarkannya keberanian dan tanggung jawab.\n"
         perkembangan = f"Memasuki remaja, {nama} bertemu banyak orang dan belajar dari pengalaman.\n"
@@ -90,7 +89,9 @@ class CSModal(discord.ui.Modal, title="Form Character Story"):
         cd_remaining = cooldown_active(user_id)
         if cd_remaining:
             await interaction.response.send_message(
-                f"❌ Maaf, kamu masih cooldown! Sisa waktu: {cd_remaining}",
+                f"⏳ **Maaf {interaction.user.mention}, kamu masih cooldown!**\n"
+                f"Sisa waktu: `{cd_remaining}`\n"
+                f"Tunggu sampai cooldown habis, atau hubungi **OWNER** ⚡",
                 ephemeral=True
             )
             return
@@ -135,6 +136,16 @@ class CSView(discord.ui.View):
 @bot.command()
 @channel_only()
 async def cs(ctx):
+    user_id = ctx.author.id
+    cd_remaining = cooldown_active(user_id)
+    if cd_remaining:
+        await ctx.send(
+            f"⏳ **Maaf {ctx.author.mention}, kamu masih cooldown!**\n"
+            f"Sisa waktu: `{cd_remaining}`\n"
+            f"Tunggu sampai cooldown habis, atau hubungi **OWNER** ⚡"
+        )
+        return
+
     view = CSView()
     await ctx.send("Pilih sisi karakter kamu untuk membuat Character Story:", view=view)
 
@@ -174,7 +185,7 @@ async def help(ctx):
 async def cekcd(ctx):
     cd_remaining = cooldown_active(ctx.author.id)
     if cd_remaining:
-        await ctx.send(f"❌ {ctx.author.mention}, kamu masih cooldown! Sisa waktu: {cd_remaining}")
+        await ctx.send(f"❌ {ctx.author.mention}, kamu masih cooldown! Sisa waktu: `{cd_remaining}` ⏳")
     else:
         await ctx.send(f"✅ {ctx.author.mention}, kamu bisa membuat Character Story sekarang!")
 
@@ -182,25 +193,33 @@ async def cekcd(ctx):
 @channel_only()
 async def reset(ctx, member: discord.Member):
     if OWNER_ROLE_ID not in [role.id for role in ctx.author.roles]:
-        await ctx.send("❌ Maaf, fitur ini hanya bisa digunakan oleh **OWNER**.")
+        await ctx.send(
+            f"❌ **Maaf {ctx.author.mention}, kamu tidak memiliki izin untuk menggunakan fitur ini!**\n"
+            f"Fitur ini hanya bisa digunakan oleh **OWNER** ⚡"
+        )
         return
+
     bot.cooldowns.pop(member.id, None)
-    await ctx.send(f"♻️ {member.mention}, cooldown-mu telah direset oleh **OWNER**! Sekarang kamu bisa membuat Character Story lagi. ✅")
+    await ctx.send(
+        f"♻️ {member.mention}, cooldown-mu telah direset oleh **OWNER**! ✅ Sekarang kamu bisa membuat Character Story lagi."
+    )
 
 @bot.command()
 @channel_only()
 async def cekcdall(ctx):
     if OWNER_ROLE_ID not in [role.id for role in ctx.author.roles]:
-        await ctx.send("❌ Maaf, fitur ini hanya bisa digunakan oleh **OWNER**.")
+        await ctx.send("❌ Maaf, fitur ini hanya bisa digunakan oleh **OWNER** ⚡")
         return
+
     now = datetime.datetime.now()
-    msg = "⏱️ Cooldown semua player:\n"
+    msg = "⏱️ **Cooldown Semua Player:**\n"
     for user_id, cd in bot.cooldowns.items():
         remaining = int((cd - now).total_seconds())
         if remaining > 0:
-            minutes = remaining // 60
+            hours = remaining // 3600
+            minutes = (remaining % 3600) // 60
             seconds = remaining % 60
-            msg += f"<@{user_id}> : `{minutes}m {seconds}s`\n"
+            msg += f"<@{user_id}> : `{hours}h {minutes}m {seconds}s`\n"
         else:
             msg += f"<@{user_id}> : ✅ Bisa digunakan\n"
     await ctx.send(msg)
@@ -208,7 +227,7 @@ async def cekcdall(ctx):
 @bot.command()
 @channel_only()
 async def ping(ctx):
-    await ctx.send(f"🏓 Pong! Bot aktif, {ctx.author.mention}")
+    await ctx.send(f"🏓 **Pong!** Bot aktif dan siap digunakan, {ctx.author.mention} ✅")
 
 # ================= RUN =================
 if TOKEN:
