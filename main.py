@@ -1,23 +1,19 @@
 import discord
 from discord.ext import commands
-import os
 import random
 import datetime
 
-# ------------------- Config -------------------
-TOKEN = os.getenv("TOKEN")
+# ================== Config ==================
+TOKEN = "YOUR_BOT_TOKEN"  # Ganti dengan token bot-mu
 ALLOWED_CHANNEL_ID = 1471935338065694875  # Channel khusus CS
 
-OWNER_ID = 1471265207945924619
-MANAGEMENT_ROLE_ID = 1471265207945924619  # Role Management
-
-# ------------------- Bot Setup -------------------
+# ================== Bot Setup ==================
 class TatangCS(commands.Bot):
     def __init__(self):
         intents = discord.Intents.default()
         intents.message_content = True
         super().__init__(command_prefix="!", intents=intents, help_command=None)
-        self.cooldowns = {}  # {user_id: datetime}
+        self.cooldowns = {}   # {user_id: datetime}
 
     async def on_ready(self):
         print(f"✅ Bot siap! Login sebagai {self.user}")
@@ -25,15 +21,13 @@ class TatangCS(commands.Bot):
 
 bot = TatangCS()
 
-# ------------------- Story Generator -------------------
+# ================== Story Generator ==================
 def generate_goodside_story(nama, gender, kota, level):
     return (
         f"{nama} lahir di kota {kota}, dalam keluarga penuh kasih dan nilai moral yang kuat.\n\n"
         "Sejak kecil, ia dikenal peduli, penuh empati, dan selalu siap membantu orang lain.\n\n"
         "Masa kecil dan sekolah membentuk karakter: disiplin, integritas, kepemimpinan, dan rasa tanggung jawab.\n\n"
         f"Di level {level}, {nama} menapaki perjalanan baru, membangun reputasi sebagai pribadi yang dapat dipercaya.\n\n"
-        "Ia bertemu mentor, membangun relasi, menghadapi konflik dengan kepala dingin, dan selalu menebar kebaikan.\n\n"
-        "Setiap keputusan dipikirkan matang, seimbang antara kepentingan diri dan orang lain.\n\n"
         "Perjalanan hidupnya baru dimulai, kisahnya akan dikenang sebagai simbol keberanian, kebaikan, dan inspirasi."
     )
 
@@ -42,39 +36,34 @@ def generate_badside_story(nama, gender, kota, level):
         f"{nama} lahir di kota {kota}, lingkungan keras membentuknya menjadi pribadi ambisius.\n\n"
         "Sejak kecil ia belajar bertahan hidup, membaca situasi, mengambil risiko, dan kadang cara gelap.\n\n"
         f"Di level {level}, {nama} menapaki jalan intrik, strategi, dan ambisi. Ia membangun reputasi dan dominasi.\n\n"
-        "Masa remaja penuh konflik, pengkhianatan, dan peluang yang harus dimanfaatkan untuk menang.\n\n"
-        "Ia menghadapi dilema moral, namun selalu menemukan cara untuk menguatkan posisinya.\n\n"
-        "Perjalanan hidupnya penuh intrik, ambisi, dan risiko. Masa depan {nama} tergantung keputusan yang diambilnya, "
-        "dan kisahnya akan dikenang sebagai legenda yang kuat dan cerdas."
+        "Perjalanan hidupnya penuh intrik dan risiko. Masa depan {nama} tergantung keputusan yang diambilnya."
     )
 
-# ------------------- Modal -------------------
+# ================== Modal ==================
 class CSModal(discord.ui.Modal, title="Form Character Story"):
-    nama = discord.ui.TextInput(label="Nama Lengkap Karakter (IC) *", placeholder="Contoh: John Washington, Kenji Tanaka", required=True)
+    nama = discord.ui.TextInput(label="Nama Lengkap Karakter (IC) *", placeholder="Contoh: John Washington", required=True)
     level = discord.ui.TextInput(label="Level Karakter *", placeholder="Contoh: 1", required=True)
     gender = discord.ui.TextInput(label="Jenis Kelamin *", placeholder="Laki-laki / Perempuan", required=True)
     tgl_lahir = discord.ui.TextInput(label="Tanggal Lahir *", placeholder="17 Agustus 1995", required=True)
-    kota = discord.ui.TextInput(label="Kota Asal *", placeholder="Los Santos, San Fierro, Las Venturas", required=True)
+    kota = discord.ui.TextInput(label="Kota Asal *", placeholder="Los Santos / San Fierro / Las Venturas", required=True)
 
-    def __init__(self, side):
+    def __init__(self, side, user_id):
         super().__init__()
         self.side = side
+        self.user_id = user_id
 
     async def on_submit(self, interaction: discord.Interaction):
-        user_id = interaction.user.id
         now = datetime.datetime.now()
 
-        # Cooldown 24 jam
-        cd = bot.cooldowns.get(user_id)
+        # Per user cooldown 24 jam
+        cd = bot.cooldowns.get(self.user_id)
         if cd and (cd - now).total_seconds() > 0:
             remaining = int((cd - now).total_seconds())
             minutes = remaining // 60
             seconds = remaining % 60
             await interaction.response.send_message(
                 f"⏳ Maaf {interaction.user.mention}, kamu masih cooldown.\n"
-                f"Sisa waktu: `{minutes}m {seconds}s`\n"
-                f"Reset cooldown bisa minta ke <@{OWNER_ID}> atau <@&{MANAGEMENT_ROLE_ID}>",
-                ephemeral=True
+                f"Sisa waktu: `{minutes}m {seconds}s`", ephemeral=True
             )
             return
 
@@ -99,76 +88,40 @@ class CSModal(discord.ui.Modal, title="Form Character Story"):
         embed.add_field(name="Kota Asal", value=kota, inline=True)
         embed.set_footer(text=f"CS dibuat oleh {interaction.user}", icon_url=interaction.user.display_avatar.url)
 
+        # Kirim embed + tag user di bawah
         await interaction.response.send_message(embed=embed)
-        bot.cooldowns[user_id] = now + datetime.timedelta(hours=24)
+        await interaction.channel.send(f"👤 CS ini dibuat oleh {interaction.user.mention}")
 
-# ------------------- Button View -------------------
+        bot.cooldowns[self.user_id] = now + datetime.timedelta(hours=24)
+
+# ================== Button View ==================
 class CSButtonView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Goodside 😇", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="😇 Goodside", style=discord.ButtonStyle.success)
     async def good(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(CSModal("Goodside"))
+        await interaction.response.send_modal(CSModal("Goodside", interaction.user.id))
 
-    @discord.ui.button(label="Badside 😈", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label="😈 Badside", style=discord.ButtonStyle.danger)
     async def bad(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(CSModal("Badside"))
+        await interaction.response.send_modal(CSModal("Badside", interaction.user.id))
 
-# ------------------- Commands -------------------
-@bot.command()
-async def menu(ctx):
-    if ctx.channel.id != ALLOWED_CHANNEL_ID:
-        return
-
-    embed = discord.Embed(
-        title="📜 Story Crafter Menu",
-        description="Gunakan command `!cs` untuk membuat Character Story epik. Pilih Goodside 😇 atau Badside 😈 lewat tombol setelah menjalankan `!cs`.",
-        color=0x5865f2
-    )
-    embed.add_field(name="✨ !help", value="Tampilkan panduan cara membuat CS.", inline=False)
-    embed.add_field(name="📖 !cs", value="Mulai membuat Character Story interaktif.", inline=False)
-    embed.add_field(name="⏳ !checkcooldown", value="Cek cooldownmu saat ini.", inline=False)
-    embed.add_field(name="♻️ !reset @player", value="Reset cooldown player (Owner / Management).", inline=False)
-    embed.add_field(name="⏱️ !cekcdall", value="Cek cooldown semua player (Owner / Management).", inline=False)
-    embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
-
-    await ctx.send(content=f"Butuh bantuan hubungi <@{OWNER_ID}> atau <@&{MANAGEMENT_ROLE_ID}>", embed=embed)
-
-@bot.command()
-async def help(ctx):
-    if ctx.channel.id != ALLOWED_CHANNEL_ID:
-        return
-
-    embed = discord.Embed(
-        title="📜 Story Crafter - Panduan Membuat CS",
-        description="Berikut panduan membuat Character Story:",
-        color=0x5865f2
-    )
-    embed.add_field(
-        name="1️⃣ Mulai CS",
-        value="Ketik `!cs` untuk memulai membuat Character Story. Pilih Goodside 😇 atau Badside 😈 lewat tombol.",
-        inline=False
-    )
-    embed.add_field(
-        name="2️⃣ Isi Form",
-        value="- Nama Lengkap Karakter (IC)\n- Level Karakter\n- Jenis Kelamin\n- Tanggal Lahir\n- Kota Asal (Los Santos, San Fierro, Las Venturas)\n\nPastikan semua data terisi.",
-        inline=False
-    )
-    embed.add_field(
-        name="3️⃣ Submit & Lihat Hasil",
-        value="Setelah submit, bot akan menampilkan CS panjang otomatis di channel.\n⚠️ Cooldown: 24 jam per user. Reset bisa minta ke Owner / Management.",
-        inline=False
-    )
-    embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
-
-    await ctx.send(content=f"Butuh bantuan hubungi <@{OWNER_ID}> atau <@&{MANAGEMENT_ROLE_ID}>", embed=embed)
-
+# ================== Commands ==================
 @bot.command()
 async def cs(ctx):
     if ctx.channel.id != ALLOWED_CHANNEL_ID:
         return
-    await ctx.send(f"📌 {ctx.author.mention}, pilih sisi karaktermu:", view=CSButtonView())
+    embed = discord.Embed(
+        title="🎨 Story Crafter",
+        description=(
+            f"Hai {ctx.author.mention}! Pilih sisi karakter kamu di bawah ini:\n\n"
+            "😇 **Goodside** → Buat karakter dengan sisi baik\n"
+            "😈 **Badside** → Buat karakter dengan sisi jahat"
+        ),
+        color=0x5865f2
+    )
+    await ctx.send(embed=embed, view=CSButtonView())
 
 @bot.command()
 async def checkcooldown(ctx):
@@ -179,26 +132,23 @@ async def checkcooldown(ctx):
         remaining = int((cd - now).total_seconds())
         minutes = remaining // 60
         seconds = remaining % 60
-        await ctx.send(
-            f"⏳ Maaf {ctx.author.mention}, kamu masih cooldown.\n"
-            f"Sisa waktu: `{minutes}m {seconds}s`\n"
-            f"Reset cooldown bisa minta ke <@{OWNER_ID}> atau <@&{MANAGEMENT_ROLE_ID}>"
-        )
+        await ctx.send(f"⏳ Maaf {ctx.author.mention}, kamu masih cooldown `{minutes}m {seconds}s`")
     else:
-        await ctx.send(f"✅ {ctx.author.mention}, kamu bisa membuat Character Story sekarang!")
+        await ctx.send(f"✅ {ctx.author.mention}, kamu bisa membuat CS sekarang!")
 
+# ================== Reset / Cek All (Owner = Pemilik Server) ==================
 @bot.command()
 async def reset(ctx, member: discord.Member):
-    if ctx.author.id != OWNER_ID and MANAGEMENT_ROLE_ID not in [r.id for r in ctx.author.roles]:
-        await ctx.send("❌ Kamu tidak punya izin untuk reset cooldown.")
+    if ctx.author != ctx.guild.owner:
+        await ctx.send("❌ Maaf, fitur ini hanya bisa digunakan oleh Tatang.")
         return
     bot.cooldowns.pop(member.id, None)
-    await ctx.send(f"♻️ Cooldown {member.mention} berhasil direset oleh {ctx.author.mention}")
+    await ctx.send(f"♻️ Cooldown {member.mention} berhasil direset!")
 
 @bot.command()
 async def cekcdall(ctx):
-    if ctx.author.id != OWNER_ID and MANAGEMENT_ROLE_ID not in [r.id for r in ctx.author.roles]:
-        await ctx.send("❌ Kamu tidak punya izin untuk cek cooldown semua.")
+    if ctx.author != ctx.guild.owner:
+        await ctx.send("❌ Maaf, fitur ini hanya bisa digunakan oleh Tatang.")
         return
     now = datetime.datetime.now()
     msg = "⏱️ Cooldown semua player:\n"
@@ -212,11 +162,44 @@ async def cekcdall(ctx):
             msg += f"<@{user_id}> : ✅ Bisa digunakan\n"
     await ctx.send(msg)
 
+# ================== Menu & Help ==================
+@bot.command()
+async def menu(ctx):
+    if ctx.channel.id != ALLOWED_CHANNEL_ID:
+        return
+    embed = discord.Embed(
+        title="📜 Story Crafter Menu",
+        description="Gunakan command `!cs` untuk membuat Character Story interaktif!",
+        color=0x5865f2
+    )
+    embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
+    embed.add_field(name="✨ !help", value="Panduan membuat CS secara mudah.", inline=False)
+    embed.add_field(name="📖 !cs", value="Mulai membuat Character Story interaktif.", inline=False)
+    embed.add_field(name="⏳ !checkcooldown", value="Cek cooldownmu saat ini.", inline=False)
+    embed.add_field(name="♻️ !reset @player", value="Reset cooldown player (Hanya Tatang).", inline=False)
+    embed.add_field(name="⏱️ !cekcdall", value="Cek cooldown semua player (Hanya Tatang).", inline=False)
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def help(ctx):
+    if ctx.channel.id != ALLOWED_CHANNEL_ID:
+        return
+    embed = discord.Embed(
+        title="📜 Story Crafter - Panduan Membuat CS",
+        description="1️⃣ Ketik `!cs` → Pilih Goodside 😇 / Badside 😈\n"
+                    "2️⃣ Isi form modal karakter\n"
+                    "3️⃣ Submit → CS panjang muncul otomatis\n"
+                    "⚠️ Cooldown: 24 jam per user",
+        color=0x5865f2
+    )
+    embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
+    await ctx.send(embed=embed)
+
 @bot.command()
 async def ping(ctx):
     await ctx.send(f"🏓 Pong! Bot aktif, {ctx.author.mention}")
 
-# ------------------- Run Bot -------------------
+# ================== Run Bot ==================
 if TOKEN:
     bot.run(TOKEN)
 else:
