@@ -1,42 +1,55 @@
 import discord
 from discord.ext import commands
 import os
-import random
 
 TOKEN = os.getenv("TOKEN")
 ALLOWED_CHANNEL_ID = 1471935338065694875
 
 # ================= BOT =================
-class TatangBot(commands.Bot):
+
+class CSBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.default()
         intents.message_content = True
-        super().__init__(command_prefix="!", intents=intents, help_command=None)
+        super().__init__(command_prefix="!", intents=intents)
 
     async def on_ready(self):
-        await self.change_presence(activity=discord.Game(name="Advanced CS Generator"))
         print(f"Bot aktif sebagai {self.user}")
+        await self.change_presence(
+            activity=discord.Game(name="Character Story Generator")
+        )
 
-bot = TatangBot()
+bot = CSBot()
 
-# ================= MODAL 2 (DETAIL TAMBAHAN) =================
-class CSDetailModal(discord.ui.Modal):
+# ================= MODAL 2/2 =================
+
+class CSModalPart2(discord.ui.Modal):
+
     def __init__(self, data):
-        super().__init__(title="Detail Cerita (2/2)")
+        super().__init__(title=f"Detail Cerita ({data['side']}) (2/2)")
         self.data = data
 
         self.skill = discord.ui.TextInput(
             label="Bakat/Keahlian Dominan Karakter",
-            required=True
+            placeholder="Contoh: Penembak jitu, mekanik, negosiator, hacker",
+            required=True,
+            max_length=200
         )
+
         self.etnis = discord.ui.TextInput(
             label="Kultur/Etnis (Opsional)",
-            required=False
+            placeholder="Contoh: American, Japanese, Hispanic",
+            required=False,
+            max_length=200
         )
+
         self.detail = discord.ui.TextInput(
-            label="Detail Tambahan (Opsional)",
+            label="Detail Cerita Karakter",
+            placeholder="Ceritakan latar belakang karakter secara lengkap, masa kecil, konflik, tujuan hidup, dll",
             style=discord.TextStyle.paragraph,
-            required=False
+            required=True,
+            min_length=200,
+            max_length=4000
         )
 
         self.add_item(self.skill)
@@ -45,81 +58,99 @@ class CSDetailModal(discord.ui.Modal):
 
     async def on_submit(self, interaction: discord.Interaction):
 
-        nama = self.data["nama"]
-        level = self.data["level"]
-        gender = self.data["gender"]
-        ttl = self.data["ttl"]
-        kota = self.data["kota"]
-        server = self.data["server"]
-        side = self.data["side"]
-
-        skill = self.skill.value
-        etnis = self.etnis.value if self.etnis.value else "Tidak disebutkan"
-        detail = self.detail.value if self.detail.value else "Tidak ada detail tambahan"
-
-        sifat_good = [
-            "memiliki hati yang tulus dan selalu mengutamakan keadilan",
-            "tumbuh sebagai pribadi disiplin dan pekerja keras",
-            "percaya bahwa kejujuran adalah pondasi kehidupan"
-        ]
-
-        sifat_bad = [
-            "dibesarkan dalam lingkungan keras penuh konflik",
-            "memiliki mental baja dan penuh perhitungan",
-            "tidak mudah percaya kepada siapapun"
-        ]
-
-        sifat = random.choice(sifat_good if side == "Goodside" else sifat_bad)
-
-        cerita = f"""
-{nama} adalah seorang {gender} yang lahir pada {ttl} di kota {kota}. 
-Sejak kecil, ia {sifat}. Kehidupan yang dijalaninya penuh dengan dinamika, 
-membentuk kepribadian yang kuat dan berpendirian.
-
-Beranjak dewasa, {nama} mulai menemukan bakat alaminya dalam bidang {skill}. 
-Kemampuannya tersebut bukan datang secara instan, melainkan hasil dari latihan, 
-pengalaman pahit, serta berbagai kegagalan yang pernah ia alami.
-
-Berasal dari latar belakang etnis/kultur {etnis}, ia membawa nilai-nilai kehidupan 
-yang ditanamkan sejak kecil ke dalam setiap keputusan yang ia ambil. 
-Hal tersebut menjadikannya sosok yang memiliki prinsip kuat dalam menjalani hidup.
-
-Saat ini, {nama} berada di level {level} dalam server {server}. 
-Memasuki dunia baru bukanlah hal yang mudah. Tantangan demi tantangan muncul, 
-mengujinya secara mental maupun fisik.
-
-{detail}
-
-Di tengah kerasnya kehidupan kota, {nama} terus melangkah maju. 
-Setiap keputusan akan menentukan apakah ia akan dikenal sebagai sosok terhormat 
-atau figur yang disegani dan ditakuti.
-
-Kisah hidupnya masih panjang. Semua pilihan kini berada di tangannya.
-"""
-
         embed = discord.Embed(
-            title="Character Story Berhasil Dibuat",
-            description=f"Karakter: **{nama}**\nServer: **{server}**\nAlur: **{side}**",
+            title="Character Story berhasil dibuat",
             color=0x2ecc71
         )
 
-        embed.add_field(name="Character Story", value=cerita[:1000], inline=False)
+        embed.add_field(name="Server", value=self.data["server"], inline=True)
+        embed.add_field(name="Alur", value=self.data["side"], inline=True)
 
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        embed.add_field(
+            name="Nama IC",
+            value=self.data["nama"],
+            inline=False
+        )
 
+        embed.add_field(
+            name="Info Karakter",
+            value=(
+                f"Level: {self.data['level']}\n"
+                f"Gender: {self.data['gender']}\n"
+                f"Tanggal Lahir: {self.data['ttl']}\n"
+                f"Kota Asal: {self.data['kota']}"
+            ),
+            inline=False
+        )
 
-# ================= MODAL 1 =================
-class CSModal(discord.ui.Modal):
+        embed.add_field(
+            name="Keahlian",
+            value=self.skill.value,
+            inline=False
+        )
+
+        if self.etnis.value:
+            embed.add_field(
+                name="Etnis",
+                value=self.etnis.value,
+                inline=False
+            )
+
+        embed.add_field(
+            name="Cerita Lengkap",
+            value=self.detail.value,
+            inline=False
+        )
+
+        await interaction.response.send_message(
+            embed=embed,
+            ephemeral=True
+        )
+
+# ================= MODAL 1/2 =================
+
+class CSModalPart1(discord.ui.Modal):
+
     def __init__(self, server, side):
         super().__init__(title="Form Character Story (1/2)")
+
         self.server = server
         self.side = side
 
-        self.nama = discord.ui.TextInput(label="Nama Lengkap Karakter (IC)", required=True)
-        self.level = discord.ui.TextInput(label="Level Karakter", required=True)
-        self.gender = discord.ui.TextInput(label="Jenis Kelamin", required=True)
-        self.ttl = discord.ui.TextInput(label="Tanggal Lahir", required=True)
-        self.kota = discord.ui.TextInput(label="Kota Asal", required=True)
+        self.nama = discord.ui.TextInput(
+            label="Nama Lengkap Karakter (IC)",
+            placeholder="Contoh: John Washington, Kenji Tanaka",
+            required=True,
+            max_length=100
+        )
+
+        self.level = discord.ui.TextInput(
+            label="Level Karakter",
+            placeholder="Contoh: 1",
+            required=True,
+            max_length=10
+        )
+
+        self.gender = discord.ui.TextInput(
+            label="Jenis Kelamin",
+            placeholder="Contoh: Laki-laki / Perempuan",
+            required=True,
+            max_length=50
+        )
+
+        self.ttl = discord.ui.TextInput(
+            label="Tanggal Lahir",
+            placeholder="Contoh: 17 Agustus 1995",
+            required=True,
+            max_length=50
+        )
+
+        self.kota = discord.ui.TextInput(
+            label="Kota Asal",
+            placeholder="Contoh: Chicago, Illinois",
+            required=True,
+            max_length=100
+        )
 
         self.add_item(self.nama)
         self.add_item(self.level)
@@ -128,78 +159,130 @@ class CSModal(discord.ui.Modal):
         self.add_item(self.kota)
 
     async def on_submit(self, interaction: discord.Interaction):
+
         data = {
+            "server": self.server,
+            "side": self.side,
             "nama": self.nama.value,
             "level": self.level.value,
             "gender": self.gender.value,
             "ttl": self.ttl.value,
-            "kota": self.kota.value,
-            "server": self.server,
-            "side": self.side
+            "kota": self.kota.value
         }
 
-        await interaction.response.send_modal(CSDetailModal(data))
+        await interaction.response.send_modal(
+            CSModalPart2(data)
+        )
 
+# ================= VIEW ALUR =================
 
-# ================= PILIH ALUR =================
-class CSAlurView(discord.ui.View):
+class SideView(discord.ui.View):
+
     def __init__(self, server):
         super().__init__(timeout=None)
         self.server = server
 
     @discord.ui.button(label="Sisi Baik (Goodside)", style=discord.ButtonStyle.success)
     async def good(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(CSModal(self.server, "Goodside"))
+
+        await interaction.response.send_modal(
+            CSModalPart1(self.server, "Goodside")
+        )
 
     @discord.ui.button(label="Sisi Jahat (Badside)", style=discord.ButtonStyle.danger)
     async def bad(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(CSModal(self.server, "Badside"))
 
+        await interaction.response.send_modal(
+            CSModalPart1(self.server, "Badside")
+        )
 
 # ================= SELECT SERVER =================
+
 class ServerSelect(discord.ui.Select):
+
     def __init__(self):
+
         options = [
-            discord.SelectOption(label="SSRP", description="Buat CS untuk server State Side RP."),
-            discord.SelectOption(label="Virtual RP", description="Buat CS untuk server Virtual RP."),
-            discord.SelectOption(label="AARP", description="Buat CS untuk server Air Asia RP."),
-            discord.SelectOption(label="GCRP", description="Buat CS untuk server Grand Country RP."),
-            discord.SelectOption(label="TEN ROLEPLAY", description="Buat CS untuk server 10RP."),
-            discord.SelectOption(label="CPRP", description="Buat CS untuk server Crystal Pride RP."),
-            discord.SelectOption(label="Relative RP", description="Buat CS untuk server Relative RP."),
-            discord.SelectOption(label="JGRP", description="Buat CS untuk server JGRP."),
-            discord.SelectOption(label="FMRP", description="Buat CS untuk server Famerlone RP.")
+
+            discord.SelectOption(
+                label="SSRP",
+                description="Buat CS untuk server State Side RP"
+            ),
+
+            discord.SelectOption(
+                label="Virtual RP",
+                description="Buat CS untuk server Virtual RP"
+            ),
+
+            discord.SelectOption(
+                label="AARP",
+                description="Buat CS untuk server Air Asia RP"
+            ),
+
+            discord.SelectOption(
+                label="GCRP",
+                description="Buat CS untuk server Grand Country RP"
+            ),
+
+            discord.SelectOption(
+                label="TEN ROLEPLAY",
+                description="Buat CS untuk server 10RP"
+            ),
+
+            discord.SelectOption(
+                label="CPRP",
+                description="Buat CS untuk server Crystal Pride RP"
+            ),
+
+            discord.SelectOption(
+                label="Relative RP",
+                description="Buat CS untuk server Relative RP"
+            ),
+
+            discord.SelectOption(
+                label="JGRP",
+                description="Buat CS untuk server JGRP"
+            ),
+
+            discord.SelectOption(
+                label="FMRP",
+                description="Buat CS untuk server Famerlone RP"
+            )
+
         ]
-        super().__init__(placeholder="Pilih server tujuan...", options=options)
+
+        super().__init__(
+            placeholder="Pilih server tujuan...",
+            options=options
+        )
 
     async def callback(self, interaction: discord.Interaction):
+
         await interaction.response.send_message(
-            "Pilih alur cerita untuk karaktermu:",
-            view=CSAlurView(self.values[0]),
+            "Pilih alur karakter:",
+            view=SideView(self.values[0]),
             ephemeral=True
         )
 
+# ================= COMMAND PANEL =================
 
-# ================= COMMAND =================
 @bot.command()
 async def panelcs(ctx):
+
     if ctx.channel.id != ALLOWED_CHANNEL_ID:
         return
 
-    view = discord.ui.View()
+    view = discord.ui.View(timeout=None)
     view.add_item(ServerSelect())
 
     embed = discord.Embed(
-        title="Selamat Datang di Character Story Generator",
-        description="Silakan pilih server tujuanmu untuk membuat Character Story.",
+        title="Form Character Story",
+        description="Pilih server untuk membuat Character Story",
         color=0x5865f2
     )
 
     await ctx.send(embed=embed, view=view)
 
-
 # ================= RUN =================
-if TOKEN:
-    bot.run(TOKEN)
-else:
-    print("TOKEN tidak ditemukan.")
+
+bot.run(TOKEN)
