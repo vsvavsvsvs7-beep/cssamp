@@ -116,7 +116,16 @@ class CSModal(discord.ui.Modal, title="Form Character Story"):
         embed.add_field(name="Story", value=story[:1024], inline=False)
         embed.set_footer(text=f"Dibuat oleh {interaction.user.display_name}", icon_url=interaction.user.display_avatar.url)
 
-        await interaction.response.send_message(embed=embed)
+        # Kirim ke DM user
+        try:
+            await interaction.user.send(embed=embed)
+            await interaction.response.send_message(f"✅ {interaction.user.mention}, CS-mu berhasil dibuat! Silakan cek DM-mu 📩", ephemeral=True)
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                f"❌ {interaction.user.mention}, tidak bisa mengirim DM. Silakan aktifkan DM dan coba lagi.",
+                ephemeral=True
+            )
+
         bot.cooldowns[user_id] = datetime.datetime.now() + datetime.timedelta(hours=24)
 
 # ================= VIEW =================
@@ -176,7 +185,7 @@ async def help(ctx):
     )
     embed.add_field(name="1️⃣ !cs", value="Klik tombol Goodside / Badside untuk memulai.", inline=False)
     embed.add_field(name="2️⃣ Isi Form", value="Lengkapi Nama IC, Level, Jenis Kelamin, Tanggal Lahir, Kota Asal.", inline=False)
-    embed.add_field(name="3️⃣ Submit", value="Story akan otomatis dibuat di channel ini.", inline=False)
+    embed.add_field(name="3️⃣ Submit", value="Story akan otomatis dikirim ke DM.", inline=False)
     embed.add_field(name="⌛ Cooldown", value="1x sehari per user. Jika masih cooldown, gunakan !cekcd untuk melihat sisa waktu.", inline=False)
     await ctx.send(embed=embed)
 
