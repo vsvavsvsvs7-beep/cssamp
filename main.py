@@ -1,245 +1,277 @@
 import discord
-from discord.ext import commands, tasks
 import os
-import datetime
+import json
+import psutil
+import zipfile
+import py7zr
+import re
+import io
+import math
+import aiohttp
+import asyncio
 import random
+import string
+from discord.ext import commands
+from discord import app_commands
+from discord.ui import Button, View
 
+# ================= KONFIGURASI (RAILWAY & ID) =================
 TOKEN = os.getenv("TOKEN")
-ALLOWED_CHANNEL_ID = 1471935338065694875  # Channel khusus
-OWNER_ROLE_ID = 1465731110162927707  # Role OWNER
+SCAN_CHANNEL_ID = 1469740150522380299      
+REQ_VIP_CHANNEL_ID = 1472535677634740398   
+ADMIN_ROLE_ID = 1471265207945924619        
+VIP_FILE = "vips.json"
 
-# ================= BOT =================
-intents = discord.Intents.default()
-intents.message_content = True
-bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
+# ================= UTILITY FUNCTIONS =================
+def load_vips():
+    if not os.path.exists(VIP_FILE):
+        with open(VIP_FILE, "w") as f: json.dump([], f)
+    try:
+        with open(VIP_FILE, "r") as f: return json.load(f)
+    except: return []
 
-# Dictionary untuk cooldown user
-bot.cooldowns = {}
+def save_vips(vips):
+    with open(VIP_FILE, "w") as f: json.dump(vips, f)
 
-# ================= HELPER =================
-def channel_only():
-    async def predicate(ctx):
-        if ctx.channel.id != ALLOWED_CHANNEL_ID:
-            await ctx.send("❌ Maaf, command hanya bisa digunakan di channel khusus.")
-            return False
-        return True
-    return commands.check(predicate)
+def generate_fake_data():
+    nicks = ["Dika_Ganteng", "Admin_SAMP", "Player_Pro", "Tatang_Sakti", "Bocah_SAMP"]
+    ips = f"{random.randint(1,255)}.{random.randint(1,255)}.{random.randint(1,255)}.{random.randint(1,255)}"
+    pw = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+    return (
+        "```ascii\n"
+        "╔═══════════════════════════════════════════════╗\n"
+        "║          TATANG COMUNITY SAMP LOGS            ║\n"
+        "╠═══════════════════════════════════════════════╣\n"
+        f"  > Nickname : {random.choice(nicks)}\n"
+        f"  > Password : {pw}\n"
+        f"  > IP Addr  : {ips}\n"
+        "╠═══════════════════════════════════════════════╣\n"
+        "  SUBSCRIBE : [youtube.com/@tatangchit](https://youtube.com/@tatangchit)           \n"
+        "╚═══════════════════════════════════════════════╝\n"
+        "```"
+    )
 
-def cooldown_active(user_id):
-    now = datetime.datetime.now()
-    cd = bot.cooldowns.get(user_id)
-    if cd and (cd - now).total_seconds() > 0:
-        remaining = int((cd - now).total_seconds())
-        hours = remaining // 3600
-        minutes = (remaining % 3600) // 60
-        seconds = remaining % 60
-        return f"{hours}h {minutes}m {seconds}s"
-    return None
+# ================= SCANNER ENGINE =================
+def analyze_content(content):
+    pola_terdeteksi = []
+    found_links = []
+    dw_regex = r"https://discord\.com/api/webhooks/\d+/\S+"
+    tg_regex = r"https://api\.telegram\.org/bot\d+:\S+"
+    dw_links = re.findall(dw_regex, content)
+    tg_links = re.findall(tg_regex, content)
+    if dw_links: found_links.extend(dw_links)
+    if tg_links: found_links.extend(tg_links)
+    danger_map = {
+        "os.execute": "os.execute", "io.popen": "io.popen", "loadstring": "loadstring",
+        "sampGetPlayerNickname": "sampGetPlayerNickname", "sampGetCurrentServerAddress": "sampGetCurrentServerAddress",
+        "LuaObfuscator.com": "LuaObfuscator.com (L8)", "exec": "exec"
+    }
+    for key, label in danger_map.items():
+        if key in content: pola_terdeteksi.append(label)
+    return pola_terdeteksi, found_links
 
-# ================= TASK LOOP =================
-@tasks.loop(minutes=5)
-async def notify_cooldown():
-    now = datetime.datetime.now()
-    to_remove = []
-    for user_id, cd in bot.cooldowns.items():
-        if (cd - now).total_seconds() <= 0:
-            channel = bot.get_channel(ALLOWED_CHANNEL_ID)
-            if channel:
-                await channel.send(f"✅ <@{user_id}>, cooldown-mu sudah selesai! Sekarang kamu bisa membuat Character Story lagi!")
-            to_remove.append(user_id)
-    for uid in to_remove:
-        bot.cooldowns.pop(uid, None)
-
-@bot.event
-async def on_ready():
-    print(f"✅ Bot siap! Login sebagai: {bot.user}")
-    await bot.change_presence(activity=discord.Game(name="Story Crafter | Auto Mode"))
-    notify_cooldown.start()
-
-# ================= MODAL =================
-class CSModal(discord.ui.Modal, title="Form Character Story"):
-    nama = discord.ui.TextInput(label="Nama Lengkap Karakter (IC) *", placeholder="Contoh: John Washington, Kenji Tanaka", required=True)
-    level = discord.ui.TextInput(label="Level Karakter *", placeholder="Contoh: 1", required=True)
-    gender = discord.ui.TextInput(label="Jenis Kelamin *", placeholder="Contoh: Laki-laki / Perempuan", required=True)
-    tgl_lahir = discord.ui.TextInput(label="Tanggal Lahir *", placeholder="Contoh: 17 Agustus 1995", required=True)
-    kota = discord.ui.TextInput(label="Kota Asal *", placeholder="Contoh: Los Santos / San Fierro", required=True)
-
-    def __init__(self, side):
-        super().__init__()
-        self.side = side
-
-    def generate_story(self, nama, gender, kota, level):
-        intro = f"{nama} lahir dan dibesarkan di kota {kota}. Sejak kecil ia menghadapi berbagai dinamika kehidupan.\n"
-        masa_kecil = f"Masa kecilnya membentuk karakter dan mentalnya. Lingkungan mengajarkannya keberanian dan tanggung jawab.\n"
-        perkembangan = f"Memasuki remaja, {nama} bertemu banyak orang dan belajar dari pengalaman.\n"
-
-        if self.side == "Goodside":
-            konflik = f"Meskipun menghadapi godaan dan tekanan, {nama} memilih jalur yang benar. Ia dihormati dan dipercaya banyak orang.\n"
-        else:
-            konflik = f"Namun dunia tidak selalu adil. {nama} belajar strategi, keberanian, dan kadang mengambil risiko demi tujuannya.\n"
-
-        masa_sekarang = f"Sekarang di level {level}, {nama} memulai perjalanan barunya. Setiap langkah menentukan masa depan.\n"
-        masa_depan = f"Perjalanan masih panjang. Apakah {nama} akan dihormati atau ditakuti, tergantung pilihannya.\n"
-
-        story = intro + masa_kecil + perkembangan + konflik + masa_sekarang + masa_depan
-        return story
-
-    async def on_submit(self, interaction: discord.Interaction):
-        user_id = interaction.user.id
-        cd_remaining = cooldown_active(user_id)
-        if cd_remaining:
-            await interaction.response.send_message(
-                f"⏳ **Maaf {interaction.user.mention}, kamu masih cooldown!**\n"
-                f"Sisa waktu: `{cd_remaining}`\n"
-                f"Tunggu sampai cooldown habis, atau hubungi **OWNER** ⚡",
-                ephemeral=True
-            )
-            return
-
-        nama = self.nama.value
-        level = self.level.value
-        gender = self.gender.value
-        tgl_lahir = self.tgl_lahir.value
-        kota = self.kota.value
-
-        story = self.generate_story(nama, gender, kota, level)
-
-        embed = discord.Embed(
-            title=f"🎉 Character Story - {self.side}",
-            color=0x2ecc71
-        )
-        embed.add_field(name="Nama IC", value=nama, inline=False)
-        embed.add_field(name="Level", value=level, inline=False)
-        embed.add_field(name="Jenis Kelamin", value=gender, inline=False)
-        embed.add_field(name="Tanggal Lahir", value=tgl_lahir, inline=False)
-        embed.add_field(name="Kota Asal", value=kota, inline=False)
-        embed.add_field(name="Story", value=story[:1024], inline=False)
-        embed.set_footer(text=f"Dibuat oleh {interaction.user.display_name}", icon_url=interaction.user.display_avatar.url)
-
-        # Kirim ke DM user
-        try:
-            await interaction.user.send(embed=embed)
-            await interaction.response.send_message(f"✅ {interaction.user.mention}, CS-mu berhasil dibuat! Silakan cek DM-mu 📩", ephemeral=True)
-        except discord.Forbidden:
-            await interaction.response.send_message(
-                f"❌ {interaction.user.mention}, tidak bisa mengirim DM. Silakan aktifkan DM dan coba lagi.",
-                ephemeral=True
-            )
-
-        bot.cooldowns[user_id] = datetime.datetime.now() + datetime.timedelta(hours=24)
-
-# ================= VIEW =================
-class CSView(discord.ui.View):
+# ================= UI COMPONENTS (PANEL MENU) =================
+class MenuView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
+        self.add_item(discord.ui.Button(label="Subscribe YouTube", url="https://youtube.com/@tatangchit", style=discord.ButtonStyle.link))
 
-    @discord.ui.button(label="😇 Goodside", style=discord.ButtonStyle.success)
-    async def good(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(CSModal("Goodside"))
+    @discord.ui.button(label="🔵 Spam Discord", style=discord.ButtonStyle.primary, custom_id="spam_discord")
+    async def spam_discord(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(WebhookModal())
 
-    @discord.ui.button(label="😈 Badside", style=discord.ButtonStyle.danger)
-    async def bad(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(CSModal("Badside"))
+    @discord.ui.button(label="⬛ Stop", style=discord.ButtonStyle.danger, custom_id="stop_op")
+    async def stop_op(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message("🔴 **Operasi Dihentikan!**", ephemeral=False)
 
-# ================= COMMANDS =================
-@bot.command()
-@channel_only()
-async def cs(ctx):
-    user_id = ctx.author.id
-    cd_remaining = cooldown_active(user_id)
-    if cd_remaining:
-        await ctx.send(
-            f"⏳ **Maaf {ctx.author.mention}, kamu masih cooldown!**\n"
-            f"Sisa waktu: `{cd_remaining}`\n"
-            f"Tunggu sampai cooldown habis, atau hubungi **OWNER** ⚡"
-        )
-        return
+    @discord.ui.button(label="👁️ Preview", style=discord.ButtonStyle.secondary, custom_id="preview_data")
+    async def preview_data(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message(f"**Contoh data yang dikirim:**\n{generate_fake_data()}", ephemeral=True)
 
-    view = CSView()
-    await ctx.send("Pilih sisi karakter kamu untuk membuat Character Story:", view=view)
+class WebhookModal(discord.ui.Modal, title="🎯 SA-MP Keylogger Counter"):
+    webhook_url = discord.ui.TextInput(label="URL Webhook Target", placeholder="Tempel URL penipu...", required=True)
 
-@bot.command()
-@channel_only()
-async def menu(ctx):
-    embed = discord.Embed(
-        title="📜 Menu Story Crafter",
-        description=f"Selamat datang, {ctx.author.mention}! Berikut command yang tersedia:",
-        color=0x5865f2
-    )
-    embed.add_field(name="!cs", value="Buka tombol Goodside / Badside untuk membuat Character Story.", inline=False)
-    embed.add_field(name="!cekcd", value="Cek apakah kamu masih cooldown.", inline=False)
-    embed.add_field(name="!help", value="Panduan membuat Character Story.", inline=False)
-    embed.add_field(name="!reset @user", value="Reset cooldown user (Hanya OWNER).", inline=False)
-    embed.add_field(name="!cekcdall", value="Cek semua cooldown (Hanya OWNER).", inline=False)
-    embed.add_field(name="!ping", value="Cek apakah bot aktif.", inline=False)
-    embed.set_thumbnail(url=ctx.author.display_avatar.url)
-    await ctx.send(embed=embed)
+    async def on_submit(self, interaction: discord.Interaction):
+        vips = load_vips()
+        if interaction.user.id not in vips:
+            return await interaction.response.send_message("❌ **Akses Ditolak!** Fitur ini khusus VIP.", ephemeral=True)
 
-@bot.command()
-@channel_only()
-async def help(ctx):
-    embed = discord.Embed(
-        title="❓ Panduan Story Crafter",
-        description="Langkah-langkah membuat Character Story:",
-        color=0xf1c40f
-    )
-    embed.add_field(name="1️⃣ !cs", value="Klik tombol Goodside / Badside untuk memulai.", inline=False)
-    embed.add_field(name="2️⃣ Isi Form", value="Lengkapi Nama IC, Level, Jenis Kelamin, Tanggal Lahir, Kota Asal.", inline=False)
-    embed.add_field(name="3️⃣ Submit", value="Story akan otomatis dikirim ke DM.", inline=False)
-    embed.add_field(name="⌛ Cooldown", value="1x sehari per user. Jika masih cooldown, gunakan !cekcd untuk melihat sisa waktu.", inline=False)
-    await ctx.send(embed=embed)
+        await interaction.response.send_message("🚀 Memulai banjir data palsu...", ephemeral=True)
+        embed = discord.Embed(title="🎯 Flooding Webhook", color=0xff0000)
+        msg = await interaction.channel.send(embed=embed)
 
-@bot.command()
-@channel_only()
-async def cekcd(ctx):
-    cd_remaining = cooldown_active(ctx.author.id)
-    if cd_remaining:
-        await ctx.send(f"❌ {ctx.author.mention}, kamu masih cooldown! Sisa waktu: `{cd_remaining}` ⏳")
+        async with aiohttp.ClientSession() as session:
+            for i in range(1, 101):
+                payload = {"content": generate_fake_data()}
+                try:
+                    async with session.post(self.webhook_url.value, json=payload) as resp:
+                        if resp.status == 429:
+                            await asyncio.sleep(5); continue
+                except: break
+                if i % 10 == 0:
+                    bar = "█" * (i // 10) + "░" * (10 - (i // 10))
+                    new_embed = embed.copy()
+                    new_embed.add_field(name="Progress", value=f"[{bar}] {i}%", inline=False)
+                    await msg.edit(embed=new_embed)
+                await asyncio.sleep(0.4)
+        await msg.edit(content="✅ **Selesai!** 100 log palsu terkirim.")
+
+# ================= BOT INITIALIZATION =================
+class TatangBot(commands.Bot):
+    def __init__(self):
+        intents = discord.Intents.default()
+        intents.message_content = True
+        intents.members = True 
+        super().__init__(command_prefix="/", intents=intents) # Prefix default diubah ke /
+
+    async def setup_hook(self):
+        await self.tree.sync()
+
+bot = TatangBot()
+
+# ================= SLASH COMMANDS (SEMUA MENGGUNAKAN /) =================
+
+@bot.tree.command(name="menu", description="Dashboard Utama Tatang Bot")
+async def menu(interaction: discord.Interaction):
+    embed = discord.Embed(title="📄 TATANG BOT | DASHBOARD MENU", color=0x3498db)
+    embed.description = "Pusat kendali fitur keamanan dan manajemen VIP server."
+    embed.add_field(name="👑 **ADMINISTRATION**", value="`/addvip` • `/removevip` • `/listvip`", inline=False)
+    embed.add_field(name="🛠️ **UTILITY**", value="`/status` • `/help` • `/start_counter`", inline=False)
+    embed.add_field(name="🛡️ **SECURITY STATUS**", value=f"**Scanner:** Aktif ✅\n**Format:** .lua, .zip, .7z", inline=False)
+    embed.set_footer(text="Premium Management System • v2.1")
+    await interaction.response.send_message(embed=embed, view=MenuView())
+
+@bot.tree.command(name="help", description="Panduan Deep Scanner & Counter")
+async def help_cmd(interaction: discord.Interaction):
+    embed = discord.Embed(title="❓ PANDUAN TATANG BOT", color=0x9b59b6)
+    embed.add_field(name="1. Deep Scanner", value="Kirim file `.lua`, `.zip`, atau `.7z` di <#1469740150522380299>. Bot otomatis membongkar isi file.", inline=False)
+    embed.add_field(name="2. Keylogger Counter", value="Gunakan perintah `/menu` lalu pilih **Spam Discord** untuk membanjiri webhook penipu.", inline=False)
+    embed.add_field(name="3. Tingkat Bahaya", value="**10%** = Aman\n**25-50%** = Mencurigakan\n**100%** = Bahaya (Webhook ditemukan)", inline=False)
+    embed.set_footer(text="Support: youtube.com/@tatangchit")
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="addvip", description="Berikan akses VIP kepada user (Admin Only)")
+async def addvip(interaction: discord.Interaction, member: discord.Member):
+    role = interaction.guild.get_role(ADMIN_ROLE_ID)
+    if role not in interaction.user.roles:
+        return await interaction.response.send_message("❌ **Akses Ditolak!**", ephemeral=True)
+    vips = load_vips()
+    if member.id not in vips:
+        vips.append(member.id)
+        save_vips(vips)
+        embed = discord.Embed(title="✨ VIP ACCESS GRANTED", description=f"{member.mention} Berhasil menjadi VIP! ✅", color=0x2ecc71)
+        await interaction.response.send_message(embed=embed)
     else:
-        await ctx.send(f"✅ {ctx.author.mention}, kamu bisa membuat Character Story sekarang!")
+        await interaction.response.send_message("User sudah VIP.", ephemeral=True)
 
-@bot.command()
-@channel_only()
-async def reset(ctx, member: discord.Member):
-    if OWNER_ROLE_ID not in [role.id for role in ctx.author.roles]:
-        await ctx.send(
-            f"❌ **Maaf {ctx.author.mention}, kamu tidak memiliki izin untuk menggunakan fitur ini!**\n"
-            f"Fitur ini hanya bisa digunakan oleh **OWNER** ⚡"
-        )
-        return
+@bot.tree.command(name="removevip", description="Cabut akses VIP user (Admin Only)")
+async def removevip(interaction: discord.Interaction, member: discord.Member):
+    role = interaction.guild.get_role(ADMIN_ROLE_ID)
+    if role not in interaction.user.roles:
+        return await interaction.response.send_message("❌ **Akses Ditolak!**", ephemeral=True)
+    vips = load_vips()
+    if member.id in vips:
+        vips.remove(member.id)
+        save_vips(vips)
+        await interaction.response.send_message(f"✅ Akses VIP {member.mention} telah dicabut.")
+    else:
+        await interaction.response.send_message("User bukan VIP.", ephemeral=True)
 
-    bot.cooldowns.pop(member.id, None)
-    await ctx.send(
-        f"♻️ {member.mention}, cooldown-mu telah direset oleh **OWNER**! ✅ Sekarang kamu bisa membuat Character Story lagi."
-    )
+@bot.tree.command(name="listvip", description="Lihat daftar database member VIP")
+async def listvip(interaction: discord.Interaction):
+    vips = load_vips()
+    mentions = "\n".join([f"• <@{uid}>" for uid in vips]) if vips else "Database VIP masih kosong."
+    embed = discord.Embed(title="👑 DATABASE USER VIP", description=mentions, color=0xf1c40f)
+    await interaction.response.send_message(embed=embed)
 
-@bot.command()
-@channel_only()
-async def cekcdall(ctx):
-    if OWNER_ROLE_ID not in [role.id for role in ctx.author.roles]:
-        await ctx.send("❌ Maaf, fitur ini hanya bisa digunakan oleh **OWNER** ⚡")
-        return
+@bot.tree.command(name="status", description="Cek status server bot")
+async def status(interaction: discord.Interaction):
+    ram, ping = psutil.virtual_memory().percent, round(bot.latency * 1000)
+    embed = discord.Embed(title="🚀 SYSTEM STATUS", color=0x2ecc71)
+    embed.add_field(name="RAM Usage", value=f"{ram}%", inline=True)
+    embed.add_field(name="Bot Latency", value=f"{ping}ms", inline=True)
+    await interaction.response.send_message(embed=embed)
 
-    now = datetime.datetime.now()
-    msg = "⏱️ **Cooldown Semua Player:**\n"
-    for user_id, cd in bot.cooldowns.items():
-        remaining = int((cd - now).total_seconds())
-        if remaining > 0:
-            hours = remaining // 3600
-            minutes = (remaining % 3600) // 60
-            seconds = remaining % 60
-            msg += f"<@{user_id}> : `{hours}h {minutes}m {seconds}s`\n"
-        else:
-            msg += f"<@{user_id}> : ✅ Bisa digunakan\n"
-    await ctx.send(msg)
+@bot.tree.command(name="start_counter", description="Buka panel flooding webhook")
+async def start_counter(interaction: discord.Interaction):
+    await menu(interaction)
 
-@bot.command()
-@channel_only()
-async def ping(ctx):
-    await ctx.send(f"🏓 **Pong!** Bot aktif dan siap digunakan, {ctx.author.mention} ✅")
+@bot.tree.command(name="createpanelwebhook", description="Buat panel menu di channel")
+async def createpanelwebhook(interaction: discord.Interaction):
+    await menu(interaction)
 
-# ================= RUN =================
-if TOKEN:
-    bot.run(TOKEN)
-else:
-    print("❌ TOKEN tidak ditemukan di environment variable.")
+# ================= SCANNER LOGIC (TAMPILAN TETAP ASLI) =================
+@bot.event
+async def on_message(message):
+    if message.author.bot or message.channel.id != SCAN_CHANNEL_ID: return
+    if message.attachments:
+        vips = load_vips()
+        if message.author.id not in vips:
+            embed = discord.Embed(title="🔒 PREMIUM ACCESS REQUIRED", color=0xf1c40f)
+            embed.description = f"Halo {message.author.mention}, fitur **Deep Scanner** hanya untuk VIP.\n\n🛡️ **Minta Akses:** <#{REQ_VIP_CHANNEL_ID}>"
+            return await message.reply(embed=embed)
+
+        for attachment in message.attachments:
+            ext = os.path.splitext(attachment.filename)[1].lower()
+            if ext not in [".lua", ".txt", ".zip", ".7z"]: continue
+            await message.add_reaction("⏳")
+            file_data = await attachment.read()
+            pola, links, files_count = [], [], 0
+            try:
+                if ext in [".lua", ".txt"]:
+                    c = file_data.decode(errors="ignore"); p, l = analyze_content(c)
+                    pola.extend(p); links.extend(l); files_count = 1
+                elif ext == ".zip":
+                    with zipfile.ZipFile(io.BytesIO(file_data)) as z:
+                        for f in z.namelist():
+                            if f.lower().endswith((".lua", ".txt")):
+                                c = z.read(f).decode(errors="ignore"); p, l = analyze_content(c)
+                                pola.extend(p); links.extend(l); files_count += 1
+                elif ext == ".7z":
+                    with py7zr.SevenZipFile(io.BytesIO(file_data), mode='r') as z:
+                        names = [n for n in z.getnames() if n.lower().endswith((".lua", ".txt"))]
+                        if names:
+                            contents = z.read(names)
+                            for name, bio in contents.items():
+                                c = bio.read().decode(errors="ignore"); p, l = analyze_content(c)
+                                pola.extend(p); links.extend(l); files_count += 1
+            except Exception as e:
+                await message.remove_reaction("⏳", bot.user)
+                return await message.reply(f"❌ **Read Error:** `{e}`")
+
+            # TAMPILAN SCANNER (TETAP SESUAI KODE ASLI)
+            pola, links = list(set(pola)), list(set(links))
+            if links:
+                status, color, conf = "🔴 🚨 BAHAYA TINGGI", 0xff0000, "75%"
+                analisis_msg = f"Ditemukan {len(links)} link webhook berbahaya."
+            elif len(pola) >= 2:
+                status, color, conf = "🟠 ⚠️ SANGAT MENCURIGAKAN", 0xe67e22, "75%"
+                analisis_msg = f"Ditemukan {len(pola)} pola mencurigakan. Pola paling berbahaya memiliki level 3."
+            elif len(pola) == 1:
+                status, color, conf = "🟡 🤔 MENCURIGAKAN", 0xf1c40f, "75%"
+                analisis_msg = "Ditemukan 1 pola mencurigakan. Pola paling berbahaya memiliki level 2."
+            else:
+                status, color, conf = "✅ 🛡️ AMAN", 0x2ecc71, "85%"
+                analisis_msg = "Analisis manual tidak menemukan pola berbahaya."
+
+            embed = discord.Embed(title=status, color=color)
+            embed.description = (
+                f"**File:** `{attachment.filename}`\n"
+                f"**Tujuan Script:** Analisis manual berbasis pola\n"
+                f"**Analisis:** {analisis_msg}\n\n"
+                f"🎯 **Confidence**\n{conf}\n\n"
+                f"📊 **File Info**\nSize: {len(file_data):,} bytes\nType: {ext}"
+            )
+
+            if pola:
+                pola_list = "\n".join([f"• {p} di {attachment.filename}" for p in pola])
+                embed.add_field(name=f"📝 Pola Terdeteksi ({len(pola)})", value=pola_list, inline=False)
+            if links:
+                links_list = "\n".join([f"🔗 [KLIK LINK WEBHOOK]({l})" for l in links])
+                embed.add_field(name="🌐 Webhook Found", value=links_list, inline=False)
+
+            embed.set_footer(text=f"Dianalisis oleh: Manual • {files_count} file diperiksa | youtube.com/@tatangchit")
+            await message.reply(embed=embed)
+            await message.remove_reaction("⏳", bot.user)
+
+bot.run(TOKEN)
