@@ -1,7 +1,7 @@
 {
   "name": "discord-ai-bot",
   "version": "1.0.0",
-  "description": "Simple Discord AI Bot using Groq",
+  "description": "Discord AI Bot using Groq",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
